@@ -1,84 +1,121 @@
-## CMake build script.
-cmake_minimum_required (VERSION 2.8.8)
+# Setup the project and settings
+project(raylib C)
+set(PROJECT_VERSION 4.0.0)
+set(API_VERSION 400)
 
-if (POLICY CMP0046)
-    cmake_policy (SET CMP0042 NEW)
-endif ()
-if (POLICY CMP0054)
-    cmake_policy (SET CMP0054 NEW)
-endif ()
+include(GNUInstallDirs)
+include(JoinPaths)
 
-project (raylib C)
-
-set (SRCS core.c
-          models.c
-          raudio.c
-          rshapes.c
-          rtext.c
-          rtextures.c
-          utils.c)
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    add_compile_options (/w)
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    add_compile_options (-w)
-endif ()
-
-add_definitions (-DPLATFORM_DESKTOP)
-
-if (CMAKE_VERSION VERSION_LESS "3.1")
-    if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        set (CMAKE_C_FLAGS "-std=gnu99 ${CMAKE_C_FLAGS}")
-    endif ()
-else ()
-    set (CMAKE_C_STANDARD 99)
-endif ()
-
-if (APPLE)
-    # Need to force OpenGL 3.3 on OS X
-    # See: https://github.com/raysan5/raylib/issues/341
-    set (GRAPHICS "GRAPHICS_API_OPENGL_33")
-    find_library (OPENGL_LIBRARY OpenGL)
-    if (NOT CMAKE_SYSTEM STRLESS "Darwin-18.0.0")
-        add_definitions (-DGL_SILENCE_DEPRECATION)
-        # (AUTHOR_WARNING "OpenGL is deprecated starting with macOS 10.14 (Mojave)!")
-    endif ()
-elseif (WIN32)
-    add_definitions (-D_CRT_SECURE_NO_WARNINGS)
-else()
-    find_library (pthread NAMES pthread)
-    find_package (OpenGL QUIET)
-    if ("${OPENGL_LIBRARIES}" STREQUAL "")
-        set (OPENGL_LIBRARIES "GL")
+# Sets build type if not set by now
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    if(RAYLIB_IS_MAIN)
+        set(default_build_type Debug)
+    else()
+        message(WARNING "Default build type is not set (CMAKE_BUILD_TYPE)")
     endif()
-    if ("${CMAKE_SYSTEM_NAME}" MATCHES "(Net|Open)BSD")
-        find_library (OSS_LIBRARY ossaudio)
-    endif()
+
+    message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+    
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-if (${OPENGL_VERSION})
-    set (${SUGGESTED_GRAPHICS} "${GRAPHICS}")
-    if (${OPENGL_VERSION} MATCHES "3.3")
-        set (GRAPHICS "GRAPHICS_API_OPENGL_33")
-    elseif (${OPENGL_VERSION} MATCHES "2.1")
-        set (GRAPHICS "GRAPHICS_API_OPENGL_21")
-    elseif (${OPENGL_VERSION} MATCHES "1.1")
-        set (GRAPHICS "GRAPHICS_API_OPENGL_11")
-    elseif (${OPENGL_VERSION} MATCHES "ES 2.0")
-        set (GRAPHICS "GRAPHICS_API_OPENGL_ES2")
-    endif ()
-    if ("${SUGGESTED_GRAPHICS}" AND NOT "${SUGGESTED_GRAPHICS}" STREQUAL "${GRAPHICS}")
-        message (WARNING "You are overriding the suggested GRAPHICS=${SUGGESTED_GRAPHICS} with ${GRAPHICS}! This may fail")
-    endif ()
+# Used as public API to be included into other projects
+set(raylib_public_headers
+    raylib.h
+    rlgl.h
+    raymath.h
+    raudio.h
+    )
+
+# Sources to be compiled
+set(raylib_sources
+    rcore.c
+    rmodels.c
+    rshapes.c
+    rtext.c
+    rtextures.c
+    utils.c
+    )
+
+# <root>/cmake/GlfwImport.cmake handles the details around the inclusion of glfw
+include(GlfwImport)
+
+# Sets additional platform options and link libraries for each platform
+# also selects the proper graphics API and version for that platform
+# Produces a variable LIBS_PRIVATE that will be used later
+include(LibraryConfigurations)
+
+if (USE_AUDIO)
+    MESSAGE(STATUS "Audio Backend: miniaudio")
+    list(APPEND raylib_sources raudio.c)
+else ()
+    MESSAGE(STATUS "Audio Backend: None (-DUSE_AUDIO=OFF)")
 endif ()
 
-if (NOT GRAPHICS)
-    set (GRAPHICS "GRAPHICS_API_OPENGL_33")
+
+add_library(raylib ${raylib_sources} ${raylib_public_headers})
+
+if (NOT BUILD_SHARED_LIBS)
+    MESSAGE(STATUS "Building raylib static library")
+    add_library(raylib_static ALIAS raylib)
+else()
+    MESSAGE(STATUS "Building raylib shared library")
+    if (MSVC)
+        target_compile_definitions(raylib
+                                   PRIVATE $<BUILD_INTERFACE:BUILD_LIBTYPE_SHARED>
+                                   INTERFACE $<INSTALL_INTERFACE:USE_LIBTYPE_SHARED>
+                                   )
+    endif ()
+endif()
+
+set_target_properties(raylib PROPERTIES
+                      PUBLIC_HEADER "${raylib_public_headers}"
+                      VERSION ${PROJECT_VERSION}
+                      SOVERSION ${API_VERSION}
+                      )
+
+if (WITH_PIC OR BUILD_SHARED_LIBS)
+    set_property(TARGET raylib PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif ()
 
-include_directories (${CMAKE_CURRENT_SOURCE_DIR} ${glfw_EXT_INCLUDE_DIR})
-link_directories (${CMAKE_CURRENT_SOURCE_DIR})
-add_library (raylib STATIC ${SRCS})
-add_dependencies (raylib glfw)
-add_definitions (-D${GRAPHICS})
+target_link_libraries(raylib "${LIBS_PRIVATE}")
 
+# Sets some compile time definitions for the pre-processor
+# If CUSTOMIZE_BUILD option is on you will not use config.h by default
+# and you will be able to select more build options
+include(CompileDefinitions)
+
+# Registering include directories
+target_include_directories(raylib
+                           PUBLIC
+                           $<INSTALL_INTERFACE:include>
+                           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+                           PRIVATE
+                           ${CMAKE_CURRENT_SOURCE_DIR}
+                           ${OPENGL_INCLUDE_DIR}
+                           ${OPENAL_INCLUDE_DIR}
+                           )
+
+# Copy the header files to the build directory for convenience
+file(COPY ${raylib_public_headers} DESTINATION "include")
+
+# Includes information on how the library will be installed on the system
+# when cmake --install is run
+include(InstallConfigurations)
+
+# Print the flags for the user
+if (DEFINED CMAKE_BUILD_TYPE)
+    message(STATUS "Generated build type: ${CMAKE_BUILD_TYPE}")
+else ()
+    message(STATUS "Generated config types: ${CMAKE_CONFIGURATION_TYPES}")
+endif ()
+
+message(STATUS "Compiling with the flags:")
+message(STATUS "  PLATFORM=" ${PLATFORM_CPP})
+message(STATUS "  GRAPHICS=" ${GRAPHICS})
+
+# Options if you want to create an installer using CPack
+include(PackConfigurations)
+
+enable_testing()
