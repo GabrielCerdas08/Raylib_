@@ -123,12 +123,12 @@
 
 #if defined(SUPPORT_GESTURES_SYSTEM)
     #define GESTURES_IMPLEMENTATION
-    #include "gestures.h"       // Gestures detection functionality
+    #include "rgestures.h"       // Gestures detection functionality
 #endif
 
 #if defined(SUPPORT_CAMERA_SYSTEM) && !defined(PLATFORM_ANDROID)
     #define CAMERA_IMPLEMENTATION
-    #include "camera.h"         // Camera system functionality
+    #include "rcamera.h"         // Camera system functionality
 #endif
 
 #if defined(SUPPORT_GIF_RECORDING)
