@@ -13,9 +13,9 @@ project (raylib C)
 set (SRCS core.c
           models.c
           raudio.c
-          shapes.c
-          text.c
-          textures.c
+          rshapes.c
+          rtext.c
+          rtextures.c
           utils.c)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
