@@ -81,13 +81,15 @@
 #ifndef INCLUDE_JAR_MOD_H
 #define INCLUDE_JAR_MOD_H
 
-// Allow custom memory allocators
-#ifndef JARMOD_MALLOC
-    #define JARMOD_MALLOC(sz)    malloc(sz)
+#include <stdio.h>
+#include <stdlib.h>
+//#include <stdbool.h>
+
+
+#ifdef __cplusplus
+extern "C" {
 #endif
-#ifndef JARMOD_FREE
-    #define JARMOD_FREE(p)       free(p)
-#endif
+
 
 
 // Basic type
@@ -238,9 +240,7 @@ typedef struct jar_mod_tracker_buffer_state_
     tracker_state * track_state_buf;
 }jar_mod_tracker_buffer_state;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+
 
 bool   jar_mod_init(jar_mod_context_t * modctx);
 bool   jar_mod_setcfg(jar_mod_context_t * modctx, int samplerate, int bits, int stereo, int stereo_separation, int filter);
@@ -260,10 +260,6 @@ void   jar_mod_seek_start(jar_mod_context_t * ctx);
 
 //-------------------------------------------------------------------------------
 #ifdef JAR_MOD_IMPLEMENTATION
-
-#include <stdio.h>
-#include <stdlib.h>
-//#include <stdbool.h>
 
 // Effects list
 #define EFFECT_ARPEGGIO              0x0 // Supported
@@ -1508,7 +1504,7 @@ void jar_mod_unload( jar_mod_context_t * modctx)
     {
         if(modctx->modfile)
         {
-            JARMOD_FREE(modctx->modfile);
+            free(modctx->modfile);
             modctx->modfile = 0;
             modctx->modfilesize = 0;
             modctx->loopcount = 0;
@@ -1517,12 +1513,14 @@ void jar_mod_unload( jar_mod_context_t * modctx)
     }
 }
 
+
+
 mulong jar_mod_load_file(jar_mod_context_t * modctx, const char* filename)
 {
     mulong fsize = 0;
     if(modctx->modfile)
     {
-        JARMOD_FREE(modctx->modfile);
+        free(modctx->modfile);
         modctx->modfile = 0;
     }
     
@@ -1535,7 +1533,7 @@ mulong jar_mod_load_file(jar_mod_context_t * modctx, const char* filename)
         
         if(fsize && fsize < 32*1024*1024)
         {
-            modctx->modfile = JARMOD_MALLOC(fsize);
+            modctx->modfile = malloc(fsize);
             modctx->modfilesize = fsize;
             memset(modctx->modfile, 0, fsize);
             fread(modctx->modfile, fsize, 1, f);
